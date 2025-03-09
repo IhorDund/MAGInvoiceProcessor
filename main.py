@@ -1,99 +1,120 @@
 import os
-import pdfplumber
 import re
-import pandas as pd
 import time
+import pdfplumber
+import pandas as pd
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 from itertools import islice
 
 
-class InvoiceProcessor:
+class InvoiceParser:
     """
-    Class responsible for extracting invoice data from PDF files and exporting it to CSV and Excel.
-    Klasa odpowiedzialna za ekstrakcję danych z faktur PDF i eksportowanie ich do plików CSV i Excel.
+    Uniwersalny parser faktur wykrywający dostawcę i ekstrahujący dane na podstawie wzorców regex.
+    Universal Invoice Parser that detects the supplier and extracts relevant invoice data based on predefined regex patterns.
     """
 
-    def __init__(self, folder_path: str, output_file: str, batch_size: int = 10):
-        self.folder_path = Path(folder_path)
-        self.output_file = Path(output_file)
-        self.batch_size = batch_size
-
-        # Precompiled regex patterns for data extraction
-        # Wstępnie skompilowane wyrażenia regularne do ekstrakcji danych
-        self.patterns = {
+    SUPPLIER_PATTERNS = {
+        "MAG Dystrybucja": {
             "invoice_number": re.compile(r"nr\s*\(S\)FS-([A-Z0-9/_]+)"),
             "issue_date": re.compile(r"Data wystawienia:\s*(\d{4}-\d{2}-\d{2})"),
             "sale_date": re.compile(r"Data sprzedaży:\s*(\d{4}-\d{2}-\d{2})"),
             "order_number": re.compile(r"Zamówienia:.*?(\d{8})"),
             "payment_due": re.compile(r"Forma płatności.*?\s+(\d{4}-\d{2}-\d{2})", re.DOTALL),
             "net_5%": re.compile(r"W tym:\s*5%\s*([\d\s,]+)"),
-            "net_23%": re.compile(r"23% \s*([\d\s,]+)"),
+            "net_23%": re.compile(r"23% \s*([\d\s,]+)")
+        },
+        "AN-BA": {
+            "invoice_number": re.compile(r"Faktura VAT\s+([\w/-]+)"),
+            "issue_date": re.compile(r"www\.facebook\.com/people/AN-BA\s*\n?(\d{4}-\d{2}-\d{2})"),
+            "sale_date": re.compile(r"NIP:\s*957-095-88-16,\s*biuro@an-ba\.pl\s*\n?(\d{4}-\d{2}-\d{2})"),
+            "order_number": re.compile(r"Uwagi\s*do\s*dokumentu:\s*(?:zam\.?\s*)?(\d+)"),
+            "payment_due": re.compile(r"W\s*terminie:\s*\d+\s*dni\s*=\s*(\d{4}-\d{2}-\d{2})"),
+            "net_23%": re.compile(r"Podstawowy\s*podatek\s*VAT\s*23%\s*([\d\s,]+)\s*([\d\s,]+)\s*([\d\s,]+)"),
+            "total_due": re.compile(r"Razem do zapłaty:\s*([\d\s,]+)"),
+            "store_id": re.compile(r"ID[:\s]+(\d{3,4})")
         }
+    }
 
-        # Alternative order number regex
-        # Alternatywne wyrażenie regularne dla numeru zamówienia
-        self.alt_order_number = re.compile(r"zam\s*(\d{8})", re.IGNORECASE)
+    @classmethod
+    def detect_supplier(cls, text: str) -> str | None:
+        """
+        Wykrywa dostawcę na podstawie znanych wzorców w tekście faktury.
+        Detects the supplier based on known patterns in the invoice text.
+        """
+        for supplier in cls.SUPPLIER_PATTERNS:
+            if supplier in text:
+                return supplier
+        return None
+
+    @classmethod
+    def extract_data(cls, text: str, supplier_override: str = None) -> dict:
+        """
+        Ekstrahuje dane faktury na podstawie wykrytego lub podanego dostawcy.
+        Extracts invoice data based on detected or specified supplier.
+        """
+        supplier = supplier_override or cls.detect_supplier(text)
+        patterns = cls.SUPPLIER_PATTERNS.get(supplier, {})
+
+        data = {key: None for key in patterns}
+        for key, pattern in patterns.items():
+            match = pattern.search(text)
+            if match:
+                data[key] = cls.clean_number(match.group(1)) if "net" in key else match.group(1).strip()
+
+        data["supplier"] = supplier or "unknown"
+        return data
+
+    @staticmethod
+    def clean_number(value: str) -> float | None:
+        """
+        Konwertuje sformatowaną liczbę na typ float.
+        Converts formatted number string to float.
+        """
+        if not value:
+            return None
+        match = re.search(r"\d{1,3}(?: \d{3})*,\d+", value)
+        return round(float(match.group(0).replace(" ", "").replace(",", ".")), 2) if match else None
+
+
+class InvoiceProcessor:
+    """
+    Przetwarza faktury PDF z podanego folderu i eksportuje dane do CSV/Excel.
+    Processes invoice PDFs from a given folder and exports extracted data to CSV/Excel.
+    """
+
+    def __init__(self, folder_path: str, output_file: str, batch_size: int = 10, supplier_name: str = None):
+        self.folder_path = Path(folder_path)
+        self.output_file = Path(output_file)
+        self.batch_size = batch_size
+        self.supplier_name = supplier_name
 
     def extract_text_from_pdf(self, pdf_path: Path) -> str:
         """
-        Extract text from a given PDF file.
-        Ekstrakcja tekstu z podanego pliku PDF.
+        Ekstrahuje tekst z podanego pliku PDF.
+        Extracts text from a given PDF file.
         """
         try:
             with pdfplumber.open(pdf_path) as pdf:
                 return "\n".join(filter(None, (page.extract_text() for page in pdf.pages)))
         except Exception as e:
-            print(f"Error processing {pdf_path}: {e}")
+            print(f"❌ Błąd przetwarzania {pdf_path}: {e}")
             return ""
-
-    def clean_number(self, value: str) -> float | None:
-        """
-        Convert a formatted string number to a float.
-        Konwersja sformatowanej liczby na wartość zmiennoprzecinkową.
-        """
-        if not value:
-            return None
-        match = re.search(r"\d{1,3}(?: \d{3})*,\d+", value)
-        if match:
-            return round(float(match.group(0).replace(" ", "").replace(",", ".")), 2)
-        return None
-
-    def extract_invoice_data(self, text: str) -> dict:
-        """
-        Extract relevant invoice data using regex patterns.
-        Ekstrakcja kluczowych danych z faktury przy użyciu wyrażeń regularnych.
-        """
-        data = {key: None for key in self.patterns.keys()}
-
-        for key, pattern in self.patterns.items():
-            matches = pattern.findall(text)
-            if matches:
-                data[key] = self.clean_number(matches[0]) if key in ["net_5%", "net_23%"] else matches[0].strip()
-
-        # Fallback for order number
-        # Alternatywna metoda pobierania numeru zamówienia
-        if not data["order_number"]:
-            match = self.alt_order_number.search(text)
-            if match:
-                data["order_number"] = match.group(1).strip()
-
-        return data
 
     def process_single_invoice(self, file: Path) -> dict:
         """
-        Process a single invoice file and extract its data.
-        Przetwarza pojedynczy plik faktury i ekstrahuje dane.
+        Przetwarza pojedynczą fakturę i ekstrahuje jej dane.
+        Processes a single invoice file and extracts its data.
         """
         text = self.extract_text_from_pdf(file)
-        invoice_data = self.extract_invoice_data(text)
+        invoice_data = InvoiceParser.extract_data(text, self.supplier_name)
         invoice_data["file_name"] = file.name
         return invoice_data
 
     def batch_iterator(self, iterable):
         """
-        Create batches of items for processing.
         Tworzy partie elementów do przetwarzania.
+        Creates batches of items for processing.
         """
         iterator = iter(iterable)
         while batch := list(islice(iterator, self.batch_size)):
@@ -101,8 +122,8 @@ class InvoiceProcessor:
 
     def process_invoices(self):
         """
-        Process all invoices in the specified folder using multiprocessing.
-        Przetwarza wszystkie faktury w podanym folderze, wykorzystując multiprocessing.
+        Przetwarza wszystkie faktury w określonym folderze, wykorzystując multiprocessing.
+        Processes all invoices in the specified folder using multiprocessing.
         """
         pdf_files = list(self.folder_path.glob("*.pdf"))
         invoices_data = []
@@ -117,16 +138,17 @@ class InvoiceProcessor:
         df.to_excel(self.output_file, index=False)
 
 
-# ============================== RUN SCRIPT ====================================
+# ============================== URUCHOMIENIE SKRYPTU ====================================
 if __name__ == "__main__":
     FOLDER_PATH = "pdf"
     OUTPUT_FILE = "pdf/invoices_data.xlsx"
+    SUPPLIER_NAME = input("Podaj nazwę dostawcy (lub zostaw puste dla automatycznego wykrycia): ").strip()
 
-    print("Starting PDF invoice processing...")
+    print("🚀 Rozpoczynam przetwarzanie faktur PDF...")
     start_time = time.perf_counter()
 
-    processor = InvoiceProcessor(FOLDER_PATH, OUTPUT_FILE)
+    processor = InvoiceProcessor(FOLDER_PATH, OUTPUT_FILE, supplier_name=SUPPLIER_NAME or None)
     processor.process_invoices()
 
     elapsed_time = time.perf_counter() - start_time
-    print(f"Processing completed in {elapsed_time:.2f} seconds. Data saved to: {OUTPUT_FILE}")
+    print(f"✅ Przetwarzanie zakończone w {elapsed_time:.2f} sekund. Dane zapisano do: {OUTPUT_FILE}")
