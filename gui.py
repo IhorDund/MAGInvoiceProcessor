@@ -168,6 +168,7 @@ class InvoiceProcessorGUI(ctk.CTk):
                 self.progress_bar.set(i / total_files)
                 self.update_idletasks()
 
+        invoices_data = InvoiceParser.match_store_email(invoices_data)
         InvoiceParser.save_to_file(invoices_data, output_file, self.output_format.get())
 
         # Resetowanie paska postępu po zakończeniu przetwarzania

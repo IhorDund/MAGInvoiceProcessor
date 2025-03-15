@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 from itertools import islice
-from config import SUPPLIER_PATTERNS, ALTERNATIVE_PATTERNS
+from config import SUPPLIER_PATTERNS, ALTERNATIVE_PATTERNS, STORE_EMAILS_FILE
 
 
 class InvoiceParser:
@@ -116,3 +116,29 @@ class InvoiceParser:
             df.to_excel(output_file, index=False, engine="openpyxl")
         else:
             df.to_csv(output_file, index=False)
+
+    @staticmethod
+    def match_store_email(data: list) -> list:
+        """
+        Matches store numbers from invoices with corresponding email addresses if the "Sklep" column exists.
+        Dopasowuje numery sklepów do e-maili, jeśli kolumna "Sklep" istnieje.
+        """
+        excel_path = STORE_EMAILS_FILE
+
+        if not os.path.exists(excel_path):
+            raise FileNotFoundError(f"Plik bazy e-maili nie został znaleziony: {excel_path}")
+
+        # Wczytanie bazy e-maili sklepów
+        store_emails_df = pd.read_excel(excel_path, dtype={"GOLD": str})
+        store_email_dict = dict(zip(store_emails_df["GOLD"].astype(str), store_emails_df["Adres e-mail sklepu"]))
+
+        # Sprawdzenie, czy w danych faktur jest kolumna "Sklep"
+        if not any("Sklep" in invoice for invoice in data):
+            return data  # Jeśli brak kolumny "Sklep", zwracamy dane bez zmian
+
+        # Dopasowanie e-maili do faktur
+        for invoice in data:
+            store_number = str(invoice.get("Sklep", ""))
+            invoice["E-mail sklepu"] = store_email_dict.get(store_number, "Brak e-maila")
+
+        return data

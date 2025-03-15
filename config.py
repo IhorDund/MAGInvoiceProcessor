@@ -34,3 +34,4 @@ ALTERNATIVE_PATTERNS = {
         "order_number": re.compile(r"Numer\s*zamówienia\s*:\s*(\d+)", re.IGNORECASE),
     }
 }
+STORE_EMAILS_FILE = "Baza_01_01_2025.xlsx"
