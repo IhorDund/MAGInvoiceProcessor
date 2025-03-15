@@ -26,7 +26,13 @@ class InvoiceParser:
 
         # ✅ Przetwarzanie regex w jednym przebiegu
         for key in selected_fields:
-            data[key] = cls._search_patterns(text, primary_patterns.get(key), alternative_patterns.get(key))
+            extracted_value = cls._search_patterns(text, primary_patterns.get(key), alternative_patterns.get(key))
+
+            # ✅ Sprawdzamy, czy wartość to liczba (VAT, NET, TOTAL)
+            if extracted_value and any(sub in key.lower() for sub in ["net", "vat", "total"]):
+                extracted_value = cls.clean_number(extracted_value)
+
+            data[key] = extracted_value
 
         data["supplier"] = supplier
         return data
@@ -41,19 +47,25 @@ class InvoiceParser:
             if pattern:
                 match = pattern.search(text)
                 if match:
-                    return InvoiceParser.clean_number(match.group(1)) if "net" in pattern.pattern or "total" in pattern.pattern else match.group(1).strip()
+                    return match.group(1).strip()
         return None
 
     @staticmethod
     def clean_number(value: str) -> float | None:
         """
-        Converts formatted number string to float.
-        Konwertuje sformatowaną liczbę na typ float.
+        Converts formatted number string to float, handling VAT, net, and total amounts.
+        Konwertuje sformatowaną liczbę na typ float, obsługując VAT, NET i TOTAL.
         """
         if not value:
             return None
-        match = re.search(r"\d{1,3}(?: \d{3})*,\d+", value)
-        return round(float(match.group(0).replace(" ", "").replace(",", ".")), 2) if match else None
+
+        # ✅ Dopasowanie liczb z separatorami (np. "1 234,56" lub "1.234,56")
+        match = re.search(r"\d{1,3}(?:[ \.]\d{3})*,\d+|\d+", value)
+        if match:
+            number = match.group(0).replace(" ", "").replace(".", "").replace(",", ".")  # Usuwamy spacje i formatowanie
+            return round(float(number), 2)  # Zwracamy jako float z dwoma miejscami po przecinku
+
+        return None
 
     @staticmethod
     def extract_text_from_pdf(pdf_path: str) -> str:
@@ -76,7 +88,8 @@ class InvoiceParser:
         with ProcessPoolExecutor(max_workers=num_workers) as executor:
             while files:
                 batch = list(islice(files, batch_size))  # Pobiera kolejne batch_size plików
-                future_results = executor.map(lambda f: InvoiceParser.process_single_file(f, supplier, selected_fields), batch)
+                future_results = executor.map(InvoiceParser.process_single_file, batch, [supplier] * len(batch),
+                                              [selected_fields] * len(batch))
                 results.extend(future_results)
 
         return results

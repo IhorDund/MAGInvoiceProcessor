@@ -1,7 +1,9 @@
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from pathlib import Path
-import concurrent.futures  # Multi-threading
+import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from functools import partial
 from parser import InvoiceParser
 from config import SUPPLIER_PATTERNS
 
@@ -10,56 +12,58 @@ class InvoiceProcessorGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        # 📌 Konfiguracja okna
-        self.title("📄 Invoice Processor")
+        # Window configuration / Konfiguracja okna aplikacji
+        self.title("Invoice Processor")
         self.geometry("750x650")
 
         self.selected_fields = []
         self.files = []
         self.supplier_name = ctk.StringVar(value="Wybierz dostawcę")
 
-        # 📂 Wybór plików
-        ctk.CTkLabel(self, text="📂 Wybierz pliki PDF:", font=("Arial", 18, "bold")).pack(pady=10)
-        ctk.CTkButton(self, text="➕ Dodaj pliki", command=self.select_files).pack(pady=5)
+        # Section for selecting PDF files / Sekcja wyboru plików PDF
+        ctk.CTkLabel(self, text="Select PDF files:", font=("Arial", 18, "bold")).pack(pady=10)
+        ctk.CTkButton(self, text="Add files", command=self.select_files).pack(pady=5)
         self.file_listbox = ctk.CTkTextbox(self, height=80, width=600)
         self.file_listbox.pack(pady=5, fill="both", expand=True)
 
-        # 🏢 Wybór dostawcy
-        ctk.CTkLabel(self, text="🏢 Wybierz dostawcę:").pack(pady=5)
-        self.supplier_dropdown = ctk.CTkComboBox(self, variable=self.supplier_name,
+        # Section for selecting the supplier / Sekcja wyboru dostawcy
+        ctk.CTkLabel(self, text="Select supplier:").pack(pady=5)
+        self.supplier_dropdown = ctk.CTkComboBox(
+            self, variable=self.supplier_name,
             values=["Wybierz dostawcę"] + list(SUPPLIER_PATTERNS.keys()),
-            command=self.update_fields)
+            command=self.update_fields
+        )
         self.supplier_dropdown.pack()
 
-        # 🔹 Kontener na dynamiczne pola wyboru
+        # Section for dynamic field selection / Sekcja dynamicznych pól wyboru
         self.frame_checkboxes = ctk.CTkFrame(self)
         self.frame_checkboxes.pack(pady=5, fill="both", expand=True)
         self.field_vars = {}
 
-        # 📜 Wybór formatu pliku
+        # Output file format selection / Sekcja wyboru formatu pliku wyjściowego
         self.output_format = ctk.StringVar(value="Excel")
-        ctk.CTkLabel(self, text="📜 Wybierz format pliku:").pack(pady=5)
+        ctk.CTkLabel(self, text="Select file format:").pack(pady=5)
         ctk.CTkRadioButton(self, text="Excel (.xlsx)", variable=self.output_format, value="Excel").pack()
         ctk.CTkRadioButton(self, text="CSV (.csv)", variable=self.output_format, value="CSV").pack()
 
-        # 🔹 Pasek postępu
+        # Progress bar / Pasek postępu
         self.progress_bar = ctk.CTkProgressBar(self, width=600)
         self.progress_bar.pack(pady=10)
         self.progress_bar.set(0)
 
-        # 🔹 Przycisk START
-        self.button_start = ctk.CTkButton(self, text="🚀 Start", command=self.start_processing)
+        # Start button / Przycisk uruchamiający przetwarzanie
+        self.button_start = ctk.CTkButton(self, text="Start", command=self.start_processing)
         self.button_start.pack_forget()
 
     def select_files(self):
-        """ 📌 Pozwala użytkownikowi wybrać pliki PDF. """
+        """ Opens a file dialog to select PDF files. / Otwiera okno dialogowe do wyboru plików PDF. """
         self.files = filedialog.askopenfilenames(filetypes=[("PDF Files", "*.pdf")])
         self.file_listbox.delete("1.0", "end")
         for file in self.files:
             self.file_listbox.insert("end", f"{Path(file).name}\n")
 
     def update_fields(self, selected_supplier):
-        """ 📌 Aktualizuje listę pól do wyboru na podstawie dostawcy. """
+        """ Updates the available fields for analysis based on the selected supplier. / Aktualizuje dostępne pola do analizy na podstawie wybranego dostawcy. """
         for widget in self.frame_checkboxes.winfo_children():
             widget.destroy()
         if selected_supplier == "Wybierz dostawcę":
@@ -74,57 +78,56 @@ class InvoiceProcessorGUI(ctk.CTk):
             self.field_vars[field] = var
         self.button_start.pack(pady=10)
 
-    def process_single_file(self, file, supplier, selected_fields):
-        """ 📌 Przetwarza pojedynczy plik PDF i zwraca dane """
-        text = InvoiceParser.extract_text_from_pdf(file)
-        data = InvoiceParser.extract_data(text, supplier, selected_fields)
-        data["file_name"] = Path(file).name
-        return data
-
     def start_processing(self):
-        """ 📌 Przetwarza faktury równolegle i zapisuje wyniki do pliku. """
+        """ Starts processing selected invoices. / Rozpoczyna przetwarzanie wybranych faktur. """
         if not self.files:
-            messagebox.showerror("❌ Błąd", "Nie wybrano żadnych plików!")
+            messagebox.showerror("Error", "No files selected!")
             return
 
         selected_fields = [field for field, var in self.field_vars.items() if var.get()]
         if not selected_fields:
-            messagebox.showerror("❌ Błąd", "Nie wybrano żadnych pól do analizy!")
+            messagebox.showerror("Error", "No fields selected for analysis!")
             return
 
         supplier = self.supplier_name.get()
         file_extension = ".xlsx" if self.output_format.get() == "Excel" else ".csv"
-        output_file = filedialog.asksaveasfilename(defaultextension=file_extension, filetypes=[("Excel files", "*.xlsx"), ("CSV files", "*.csv")])
+        output_file = filedialog.asksaveasfilename(
+            defaultextension=file_extension,
+            filetypes=[("Excel files", "*.xlsx"), ("CSV files", "*.csv")]
+        )
 
         if not output_file:
-            messagebox.showerror("❌ Błąd", "Nie wybrano pliku do zapisania!")
+            messagebox.showerror("Error", "No output file selected!")
             return
 
-        # ✅ WYŁĄCZ PRZYCISK START W TRAKCIE PRZETWARZANIA
+        start_time = time.perf_counter()
+
+        # Disable the start button while processing / Wyłącza przycisk start podczas przetwarzania
         self.button_start.configure(state="disabled")
         self.progress_bar.set(0)
 
         invoices_data = []
         total_files = len(self.files)
 
-        # ✅ Wykorzystujemy wielowątkowość do przetwarzania plików szybciej!
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = {executor.submit(self.process_single_file, file, supplier, selected_fields): file for file in self.files}
+        # Multi-threaded invoice processing / Wielowątkowe przetwarzanie faktur
+        with ProcessPoolExecutor() as executor:
+            process_func = partial(InvoiceParser.process_single_file, supplier=supplier, selected_fields=selected_fields)
+            futures = {executor.submit(process_func, file): file for file in self.files}
 
-            for i, future in enumerate(concurrent.futures.as_completed(futures), start=1):
+            for i, future in enumerate(as_completed(futures), start=1):
                 invoices_data.append(future.result())
-
-                # ✅ AKTUALIZACJA PASKA POSTĘPU
                 self.progress_bar.set(i / total_files)
-                self.update_idletasks()  # Odświeżenie GUI
+                self.update_idletasks()
 
         InvoiceParser.save_to_file(invoices_data, output_file, self.output_format.get())
 
-        # ✅ PASEK POSTĘPU NA 100% I PRZYCISK ZNÓW WŁĄCZONY
+        # Processing completed / Zakończenie przetwarzania
         self.progress_bar.set(1)
         self.button_start.configure(state="normal")
 
-        messagebox.showinfo("✅ Sukces", f"Dane zapisane do: {output_file}")
+        elapsed_time = time.perf_counter() - start_time
+        formatted_time = f"{elapsed_time:.2f} seconds"
+        messagebox.showinfo("Success", f"Data saved to: {output_file}\nProcessing time: {formatted_time}")
 
 
 if __name__ == "__main__":
