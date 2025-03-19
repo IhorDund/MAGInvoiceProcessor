@@ -2,6 +2,7 @@ import os
 import re
 import pdfplumber
 import pandas as pd
+import numpy as np
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 from itertools import islice
@@ -142,3 +143,89 @@ class InvoiceParser:
             invoice["E-mail sklepu"] = store_email_dict.get(store_number, "Brak e-maila")
 
         return data
+
+    @staticmethod
+    def preprocess_gold_data(gold_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Cleans and processes GOLD data by aggregating duplicate order numbers and selecting the correct invoice number.
+        Oczyszcza i przetwarza dane GOLD poprzez sumowanie duplikatów Nr Zamówienia i wybór poprawnego Nr faktury.
+
+        :param gold_df: DataFrame containing raw GOLD data.
+        :return: Processed DataFrame with aggregated values.
+        """
+        required_columns = ["Nr Zamówienia", "Nr faktury", "Brutto"]
+
+        # ✅ Validation: Ensure required columns exist
+        if not all(col in gold_df.columns for col in required_columns):
+            raise ValueError(
+                f"Błąd: brak wymaganych kolumn w pliku GOLD. Oczekiwano {required_columns}. Znalezione: {list(gold_df.columns)}"
+            )
+
+        # ✅ Convert empty invoice numbers to NaN for easier filtering
+        gold_df["Nr faktury"] = gold_df["Nr faktury"].replace("", np.nan)
+
+        # ✅ Aggregate duplicate orders by summing "Brutto" and selecting the first valid invoice number
+        grouped = gold_df.groupby("Nr Zamówienia").agg(
+            {
+                "Brutto": "sum",  # Sum all "Brutto" values for the same order number
+                "Nr faktury": lambda x: next((val for val in x if pd.notna(val)), x.iloc[-1])
+                # Select the first non-null invoice number, or the last one if all are NaN
+            }
+        ).reset_index()
+
+        return grouped
+
+    @staticmethod
+    def load_gold_data(file_path: str) -> pd.DataFrame:
+        """
+        Loads and preprocesses GOLD data from an Excel file.
+        Wczytuje i przetwarza dane GOLD z pliku Excel.
+
+        :param file_path: Path to the GOLD Excel file.
+        :return: Processed DataFrame with cleaned GOLD data.
+        """
+        required_columns = ["Nr Zamówienia", "Nr faktury", "Brutto"]
+
+        # ✅ Load the Excel file, skipping the first row, and enforce column data types
+        gold_df = pd.read_excel(file_path, skiprows=1, dtype={"Nr Zamówienia": str, "Nr faktury": str, "Brutto": float})
+
+        # ✅ Validation: Ensure required columns exist
+        missing_columns = [col for col in required_columns if col not in gold_df.columns]
+        if missing_columns:
+            raise ValueError(
+                f"Błąd: brak wymaganych kolumn w pliku GOLD. Oczekiwano {required_columns}. Znalezione: {list(gold_df.columns)}"
+            )
+
+        # ✅ Process duplicates (sum "Brutto", select correct "Nr faktury")
+        return InvoiceParser.preprocess_gold_data(gold_df)
+
+    @staticmethod
+    def compare_with_gold(invoices: list, gold_df: pd.DataFrame) -> list:
+        """
+        Compares extracted invoices with GOLD data using order numbers.
+        Porównuje wyekstrahowane faktury z danymi GOLD na podstawie numeru zamówienia.
+
+        :param invoices: List of extracted invoice dictionaries.
+        :param gold_df: Processed DataFrame with GOLD data.
+        :return: Updated list of invoices with GOLD comparisons.
+        """
+        # ✅ Convert GOLD data to a dictionary for fast lookups
+        gold_dict = gold_df.set_index("Nr Zamówienia").to_dict(orient="index")
+
+        for invoice in invoices:
+            order_number = str(invoice.get("Numer zamówienia", "")).strip()
+
+            if order_number in gold_dict:
+                gold_data = gold_dict[order_number]
+                invoice["Brutto GOLD"] = gold_data.get("Brutto", "Brak danych")
+                invoice["Nr faktury GOLD"] = gold_data.get("Nr faktury", "Brak danych")
+
+                # ✅ Verify if the "Brutto" amount matches
+                invoice["Brutto zgodne?"] = "TAK" if str(invoice.get("Brutto", "")) == str(
+                    gold_data.get("Brutto", "")) else "NIE"
+            else:
+                invoice["Brutto GOLD"] = "Brak w GOLD"
+                invoice["Nr faktury GOLD"] = "Brak w GOLD"
+                invoice["Brutto zgodne?"] = "NIE"
+
+        return invoices
