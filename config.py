@@ -2,7 +2,7 @@ import re
 
 # ✅ Konfiguracja dostawców faktur oraz ich wzorców regex
 SUPPLIER_PATTERNS = {
-    "MAG Dystrybucja": {
+    "53597 MAG Dystrybucja": {
         "Numer faktóry": re.compile(r"nr\s*\(S\)FS-([A-Z0-9/_]+)"),
         "Data wystawienia": re.compile(r"Data wystawienia:\s*(\d{4}-\d{2}-\d{2})"),
         "Data sprzedaży": re.compile(r"Data sprzedaży:\s*(\d{4}-\d{2}-\d{2})"),
@@ -22,6 +22,15 @@ SUPPLIER_PATTERNS = {
         "VAT 23%": re.compile(r"Podstawowy\s*podatek\s*VAT\s*23%\s*([\d\s,]+)\s*([\d\s,]+)\s*([\d\s,]+)"),
         "Brutto": re.compile(r"Razem do zapłaty:\s*([\d\s,]+)"),
         "Sklep": re.compile(r"ID[:\s]+(\d{3,4})"),
+    },
+    "52697 Canpol": {
+        "Numer faktury": re.compile(r'Nr(\d+/\d+/[A-Z]+)'),
+        "Data wystawienia": re.compile(r"(\d{4}-\d{2}-\d{2}) Wysogotowo"),
+        "Data sprzedaży": re.compile(r"Wysogotowo (\d{4}-\d{2}-\d{2})"),
+        "Numer zamówienia": re.compile(r"ZAM\.\s*(\d+)"),
+        "Termin płatności": re.compile(r"Termin p.*?(\d{4}-\d{2}-\d{2})"),
+        "VAT 23%": re.compile(r"(\d+,\d+)\s*23%\s*(\d+,\d+)"),
+        "Brutto": re.compile(r"Razem do zap.*?(\d+,\d+) PLN"),
     }
 }
 
