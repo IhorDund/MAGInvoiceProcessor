@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 import pdfplumber
 import pandas as pd
@@ -119,12 +120,25 @@ class InvoiceParser:
             df.to_csv(output_file, index=False)
 
     @staticmethod
+    def resource_path(relative_path: str) -> str:
+        """
+        Returns absolute path to resource file, supporting PyInstaller environment.
+        Zwraca bezwzględną ścieżkę do pliku zasobu, wspierając środowisko PyInstaller.
+        """
+        try:
+            base_path = sys._MEIPASS  # Ścieżka tymczasowa tworzona przez PyInstaller
+        except AttributeError:
+            base_path = os.path.abspath(".")  # Ścieżka do katalogu bieżącego podczas uruchamiania lokalnie
+
+        return os.path.join(base_path, relative_path)
+
+    @staticmethod
     def match_store_email(data: list) -> list:
         """
         Matches store numbers from invoices with corresponding email addresses if the "Sklep" column exists.
         Dopasowuje numery sklepów do e-maili, jeśli kolumna "Sklep" istnieje.
         """
-        excel_path = STORE_EMAILS_FILE
+        excel_path = InvoiceParser.resource_path(STORE_EMAILS_FILE)
 
         if not os.path.exists(excel_path):
             raise FileNotFoundError(f"Plik bazy e-maili nie został znaleziony: {excel_path}")

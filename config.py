@@ -1,6 +1,6 @@
 import re
 
-# ✅ Konfiguracja dostawców faktur oraz ich wzorców regex
+#  Konfiguracja dostawców faktur oraz ich wzorców regex
 SUPPLIER_PATTERNS = {
     "53597 MAG Dystrybucja": {
         "Numer faktóry": re.compile(r"nr\s*\(S\)FS-([A-Z0-9/_]+)"),
@@ -13,7 +13,7 @@ SUPPLIER_PATTERNS = {
         "VAT 23%": re.compile(r"23% \s*([\d\s,]+)"),
         "Brutto": re.compile(r"Razem do zapłaty:\s*([\d\s,]+)"),
     },
-    "AN-BA": {
+    "55653 AN-BA": {
         "Numer faktóry": re.compile(r"Faktura VAT\s+([\w/-]+)"),
         "Data wystawienia": re.compile(r"www\.facebook\.com/people/AN-BA\s*\n?(\d{4}-\d{2}-\d{2})"),
         "Data sprzedaży": re.compile(r"NIP:\s*957-095-88-16,\s*biuro@an-ba\.pl\s*\n?(\d{4}-\d{2}-\d{2})"),
@@ -31,10 +31,20 @@ SUPPLIER_PATTERNS = {
         "Termin płatności": re.compile(r"Termin p.*?(\d{4}-\d{2}-\d{2})"),
         "VAT 23%": re.compile(r"(\d+,\d+)\s*23%\s*(\d+,\d+)"),
         "Brutto": re.compile(r"Razem do zap.*?(\d+,\d+) PLN"),
+    },
+    "52026 Paso": {
+        "Numer faktury": re.compile(r"FAKTURA VAT\s+([0-9A-Z/-]+)"),
+        "Data wystawienia": re.compile(r"Data wystawienia:\s*(\d{4}-\d{2}-\d{2})"),
+        "Data sprzedaży": re.compile(r"Data sprzedaży:\s*(\d{4}-\d{2}-\d{2})"),
+        "Numer zamówienia": re.compile(r"Nr zamówienia klienta:\s*([0-9]+)"),
+        "Termin płatności": re.compile(r"Termin płatności:\s*(\d{4}-\d{2}-\d{2})"),
+        "VAT 23%": re.compile(r"Zestawienie podatku VAT.*?\n.*?([\d,.]+)\s+23%", re.DOTALL),
+        "Brutto": re.compile(r"SUMA OGÓŁEM\s+([\d,.]+)"),
+        "Sklep": re.compile(r"SMYK\s+(\d{3,4})"),
     }
 }
 
-# ✅ Alternatywne wzorce regex do użycia, jeśli podstawowe nie znajdą wartości
+#  Alternatywne wzorce regex do użycia, jeśli podstawowe nie znajdą wartości
 ALTERNATIVE_PATTERNS = {
     "MAG Dystrybucja": {
         "order_number": re.compile(r"zam\s*(\d{8})", re.IGNORECASE),
@@ -43,4 +53,4 @@ ALTERNATIVE_PATTERNS = {
         "order_number": re.compile(r"Numer\s*zamówienia\s*:\s*(\d+)", re.IGNORECASE),
     }
 }
-STORE_EMAILS_FILE = "BAZA stan na 01.01.2025 1.xlsx"
+STORE_EMAILS_FILE = "Baza_01_01_2025.xlsx"

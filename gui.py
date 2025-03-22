@@ -34,8 +34,8 @@ class InvoiceProcessorGUI(ctk.CTk):
         self.files = []  # Lista wybranych plików PDF / List of selected PDF files
         self.supplier_name = ctk.StringVar(value="Wybierz dostawcę")  # Zmienna do wyboru dostawcy / Supplier selection variable
 
-        # 📂 Sekcja wyboru plików PDF
-        # 📂 File selection section
+        #  Sekcja wyboru plików PDF
+        #  File selection section
         ctk.CTkLabel(self, text="📂 Wybierz pliki PDF:", font=("Arial", 18, "bold")).pack(pady=10)
 
         button_frame = ctk.CTkFrame(self)  # Ramka dla przycisków wyboru plików / Frame for file selection buttons
@@ -51,8 +51,8 @@ class InvoiceProcessorGUI(ctk.CTk):
         self.file_listbox = ctk.CTkTextbox(self, height=80, width=600, state="disabled")
         self.file_listbox.pack(pady=5, fill="both", expand=True)
 
-        # 🏢 Sekcja wyboru dostawcy
-        # 🏢 Supplier selection section
+        #  Sekcja wyboru dostawcy
+        #  Supplier selection section
         ctk.CTkLabel(self, text="🏢 Wybierz dostawcę:").pack(pady=5)
 
         # Lista rozwijana z dostawcami / Dropdown list for selecting a supplier
@@ -63,14 +63,14 @@ class InvoiceProcessorGUI(ctk.CTk):
         )
         self.supplier_dropdown.pack()
 
-        # 🔄 Sekcja dynamicznych pól wyboru (checkboxy)
-        # 🔄 Dynamic field selection section (checkboxes)
+        #  Sekcja dynamicznych pól wyboru (checkboxy)
+        #  Dynamic field selection section (checkboxes)
         self.frame_checkboxes = ctk.CTkFrame(self)
         self.frame_checkboxes.pack(pady=5, fill="both", expand=True)
         self.field_vars = {}  # Słownik przechowujący zmienne checkboxów / Dictionary storing checkbox variables
 
-        # 📜 Sekcja wyboru formatu pliku wyjściowego
-        # 📜 Output file format selection section
+        #  Sekcja wyboru formatu pliku wyjściowego
+        #  Output file format selection section
         self.output_format = ctk.StringVar(value="Excel")  # Domyślny format pliku wyjściowego / Default output file format
 
         ctk.CTkLabel(self, text="📜 Wybierz format pliku:").pack(pady=5)
@@ -81,19 +81,19 @@ class InvoiceProcessorGUI(ctk.CTk):
         # Przycisk do wyboru formatu CSV (.csv) / Button to select CSV (.csv) format
         ctk.CTkRadioButton(self, text="CSV (.csv)", variable=self.output_format, value="CSV").pack()
 
-        # 📊 Pasek postępu
-        # 📊 Progress bar
+        #  Pasek postępu
+        #  Progress bar
         self.progress_bar = ctk.CTkProgressBar(self, width=600)
         self.progress_bar.pack(pady=10)
         self.progress_bar.set(0)  # Ustawienie początkowej wartości na 0 / Set initial progress to 0
 
-        # 🚀 Przycisk uruchamiający przetwarzanie (na start ukryty)
-        # 🚀 Start processing button (initially hidden)
+        #  Przycisk uruchamiający przetwarzanie (na start ukryty)
+        #  Start processing button (initially hidden)
         self.button_start = ctk.CTkButton(self, text="🚀 Rozpocznij przetwarzanie", command=self.start_processing)
         self.button_start.pack_forget()  # Ukrycie przycisku do momentu, gdy użytkownik wybierze pliki i dostawcę / Hide the button until files and supplier are selected
 
-        # 📊 Checkbox do porównania wyników z GOLD
-        # 📊 Checkbox for comparing results with GOLD
+        #  Checkbox do porównania wyników z GOLD
+        #  Checkbox for comparing results with GOLD
         self.compare_gold_var = ctk.BooleanVar(value=False)
 
         self.compare_gold_checkbox = ctk.CTkCheckBox(
@@ -103,8 +103,8 @@ class InvoiceProcessorGUI(ctk.CTk):
         )
         self.compare_gold_checkbox.pack(pady=5)
 
-        # 📂 Ścieżka do pliku GOLD (na start brak)
-        # 📂 Path to the GOLD file (initially None)
+        #  Ścieżka do pliku GOLD (na start brak)
+        #  Path to the GOLD file (initially None)
         self.gold_file_path = None
 
     def select_files(self):
@@ -199,8 +199,8 @@ class InvoiceProcessorGUI(ctk.CTk):
         # Retrieve field patterns for the selected supplier
         patterns = SUPPLIER_PATTERNS.get(selected_supplier, {})
 
-        # 📌 Ustal liczbę kolumn dla checkboxów (np. 4 równe kolumny)
-        # 📌 Set the number of columns for checkboxes (e.g., 4 equal columns)
+        #  Ustal liczbę kolumn dla checkboxów (np. 4 równe kolumny)
+        #  Set the number of columns for checkboxes (e.g., 4 equal columns)
         cols = 4
         row = 0
         col = 0
@@ -231,8 +231,8 @@ class InvoiceProcessorGUI(ctk.CTk):
                 col = 0
                 row += 1
 
-        # 📌 Opcjonalnie: Centrowanie zawartości poprzez konfigurację pierwszej i ostatniej kolumny
-        # 📌 Optionally: Center content by configuring the first and last columns
+        #  Opcjonalnie: Centrowanie zawartości poprzez konfigurację pierwszej i ostatniej kolumny
+        #  Optionally: Center content by configuring the first and last columns
         self.frame_checkboxes.grid_columnconfigure(0, weight=1)
         self.frame_checkboxes.grid_columnconfigure(cols - 1, weight=1)
 
@@ -355,7 +355,6 @@ class InvoiceProcessorGUI(ctk.CTk):
         # Dopasowanie e-maili sklepów do przetworzonych danych
         # Match store emails to processed data
         invoices_data = InvoiceParser.match_store_email(invoices_data)
-
         # Zapisanie danych do pliku
         # Save processed data to a file
         InvoiceParser.save_to_file(invoices_data, output_file, self.output_format.get())
